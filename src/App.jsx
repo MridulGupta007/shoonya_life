@@ -73,9 +73,9 @@ function App() {
                   // filter params are created
                   const params = new URLSearchParams(baseUrl.search);
                   if (params.has("filter")) {
-                    params.set("filter", event.target.value);
+                    params.set("filter", unixTimestamp);
                   } else {
-                    params.append("filter", event.target.value);
+                    params.append("filter", unixTimestamp);
                     params.toString();
                   }
 
