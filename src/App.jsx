@@ -2,50 +2,99 @@ import React, { createContext, useEffect, useState } from "react";
 import Retreats from "./Components/Retreats";
 import Footer from "./Components/Footer";
 import { debounce } from "lodash";
-const UrlContext = createContext();
-export { UrlContext };
+import { data } from "autoprefixer";
+
+const RetreatContext = createContext();
+export { RetreatContext };
 
 function App() {
+  // URL setup
+  const baseUrl = new URL(
+    "https://669f704cb132e2c136fdd9a0.mockapi.io/api/v1/retreats"
+  );
+  const [url, setUrl] = useState(baseUrl);
+
+  // store fetched data for multiple retreats
+  const [retreatList, setRetreatList] = useState([]);
+
+  // storing an object of params
+  const [paramObject, setParamObject] = useState({ page: 1, limit: 3 });
+
+  // store fetched data for single retreat
+  const [singleRetreat, setSingleRetreat] = useState({});
+
+  // verify null response from API
+  const [receivedNullData, setReceivedNullData] = useState(false);
+
+  // manage pages
   const [pageNum, setPageNum] = useState(1);
 
-  // received data from url
-  const [data, setData] = useState([]);
+  // create URL with added params in base URL
+  const createUrl = (obj) => {
 
-  // determines if received data is of favourable type
-  const [receivedData, setReceivedData] = useState(false)
+    // converting the params object to strings
+    const newParams = new URLSearchParams([...Object.entries(obj)]).toString();
 
-  // baseUrl is formed
-  let baseUrl = new URL(
-    `https://669f704cb132e2c136fdd9a0.mockapi.io/api/v1/retreats?page=` +
-      pageNum +
-      `&limit=3`
-  );
+    // new url is generated from baseURl
+    const newUrl = new URL(`${baseUrl.origin}${baseUrl.pathname}?${newParams}`);
+    return newUrl.href;
+  };
 
-  // debouncing is implemented to deal with user input for search filter
-  const fetchData = debounce(async (url) => {
+  // fetch data function
+  // 'single' param checks whether the url fetches single retreat or multiple
+  const fetchData = debounce(async (url, single) => {
     try {
-      const fetchedInfo = await fetch(url);
-      const jsonInfo = await fetchedInfo.json();
-      
-      // if data is correct, setData is called and receivedData is set to true
-      if(jsonInfo !== 'Not found'){
-        setReceivedData(true)
-        setData(jsonInfo)
-      } else{
-        setReceivedData(false)
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }, 10);
+      const fetchedData = await fetch(url);
 
-  // useEffect manages the fetch Api call
+      if (fetchedData.status >= 400 && fetchedData.status <= 499) {
+        
+        setReceivedNullData(true);
+      } else {
+        setReceivedNullData(false)
+        const fetchedDataToJson = await fetchedData.json();
+        
+        if (single) {
+          
+          setRetreatList([])
+          setSingleRetreat(fetchedDataToJson);
+         
+        } else {
+          
+          setRetreatList(fetchedDataToJson);
+          
+        }
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }, 100);
+
   useEffect(() => {
-    fetchData(baseUrl);
-  }, [pageNum]);
+    // generating Initial URL for request with parameters
+    const initialReq = createUrl(paramObject);
+    
+    // maintaining URL state for future considerations
+    setUrl(initialReq);
+
+    // making request
+    fetchData(initialReq, false);
+  }, [paramObject]);
 
   return (
-    <UrlContext.Provider value={{ pageNum, setPageNum, data, receivedData }}>
+    <RetreatContext.Provider
+      value={{
+        singleRetreat,
+        retreatList,
+        pageNum,
+        setPageNum,
+        setUrl,
+        url,
+        createUrl,
+        receivedNullData,
+        paramObject,
+        setParamObject,
+      }}
+    >
       <>
         <Navbar />
 
@@ -66,22 +115,33 @@ function App() {
               <input
                 type="date"
                 className="px-2 py-3 outline-none focus:outline-none active:outline-none bg-[#efefef] md:bg-[#1b3252] rounded-md md:text-white md:placeholder:text-white md:w-20 lg:w-40"
-                onChange={event => {
-                  // received date is converted to Unix timestamp
-                  const unixTimestamp = Math.floor((new Date(event.target.value)).getTime() / 1000)
+                onChange={(event) => {
+                  if (event.target.value) {
+                    const unixTimeStamp = Math.floor(
+                      new Date(event.target.value).getTime() / 1000
+                    );
+                    const existingParams = new URLSearchParams(url.search);
 
-                  // filter params are created
-                  const params = new URLSearchParams(baseUrl.search);
-                  if (params.has("filter")) {
-                    params.set("filter", unixTimestamp);
+                    if (existingParams.has("date")) {
+                      const newObj = {
+                        ...paramObject,
+                        date: unixTimeStamp,
+                      };
+
+                      setParamObject(newObj);
+                    } else {
+                      const newObj = {
+                        ...paramObject,
+                        date: unixTimeStamp,
+                      };
+
+                      setParamObject(newObj);
+                    }
                   } else {
-                    params.append("filter", unixTimestamp);
-                    params.toString();
+                    const newObj = {...paramObject}
+                    delete newObj.date
+                    setParamObject(newObj);
                   }
-
-                  // new base url is created
-                  baseUrl = baseUrl.origin + baseUrl.pathname + "?" + params;
-                  fetchData(baseUrl);
                 }}
               />
               <select
@@ -89,24 +149,37 @@ function App() {
                 id="type"
                 className="px-2 py-3 outline-none focus:outline-none active:outline-none bg-[#efefef] md:bg-[#1b3252] rounded-md md:text-white md:placeholder:text-white md:w-20 lg:w-40"
                 onChange={(event) => {
+                  // checking for null or undefined values
+                  if (event.target.value) {
+                    // destructure existing params
+                    const existingParams = new URLSearchParams(url.search);
 
-                  // existing params are retrieved from url
-                  const params = new URLSearchParams(baseUrl.search);
-
-                  // verifying if filter params exist
-                  if (params.has("filter")) {
-                    params.set("filter", event.target.value);
+                    // verify if filter param exist
+                    if (existingParams.has("filter")) {
+                      // if TRUE
+                      const newObj = {
+                        ...paramObject,
+                        filter: event.target.value,
+                      };
+                      setParamObject(newObj);
+                    } else {
+                      // if FALSE
+                      const newObj = {
+                        ...paramObject,
+                        filter: event.target.value,
+                      };
+                      setParamObject(newObj);
+                    }
                   } else {
-                    params.append("filter", event.target.value);
-                    params.toString();
+                    // if the current value is either undefined or NULL
+                    
+                    const newObj = {...paramObject}
+                    delete newObj.filter
+                    setParamObject(newObj);
                   }
-
-                  // new url is created
-                  baseUrl = baseUrl.origin + baseUrl.pathname + "?" + params;
-                  fetchData(baseUrl);
                 }}
               >
-                <option value="" disabled selected>
+                <option value="" selected>
                   Filter by Type
                 </option>
                 <option value="Yoga">Yoga</option>
@@ -119,19 +192,55 @@ function App() {
               placeholder="Search retreats by title"
               className="outline-none focus:outline-none active:outline-none border border-[#efefef] px-2 py-2 md:bg-[#1b3252] rounded-md md:text-white md:placeholder:text-white lg:min-w-[500px]"
               onChange={(event) => {
-                const params = new URLSearchParams(baseUrl.search);
+                // checking for null or undefined values
+                if (event.target.value) {
+                  // destructure existing params
+                  const existingParams = new URLSearchParams(url.search);
 
-                // verifying if search param exists
-                if (params.has("search")) {
-                  params.set("search", event.target.value);
+                  // verify if search param exist
+                  if (existingParams.has("search")) {
+                    // if TRUE
+                    const newObj = {
+                      ...paramObject,
+                      search: event.target.value,
+                    };
+                    setParamObject(newObj);
+                  } else {
+                    // if FALSE
+                    const newObj = {
+                      ...paramObject,
+                      search: event.target.value,
+                    };
+                    setParamObject(newObj);
+                  }
                 } else {
-                  params.append("search", event.target.value);
-                  params.toString();
+                  // if the current value is undefined or NULL
+                  const newObj = {...paramObject}
+                  delete newObj.search
+                  setParamObject(newObj);
                 }
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Search retreats by Id"
+              className="outline-none focus:outline-none active:outline-none border border-[#efefef] px-2 py-2 md:bg-[#1b3252] rounded-md md:text-white md:placeholder:text-white lg:min-w-[500px]"
+              onChange={(event) => {
+                let newUrl;
 
-                // new url is created with updated search params
-                baseUrl = baseUrl.origin + baseUrl.pathname + "?" + params;
-                fetchData(baseUrl);
+                // checking for null or undefined values
+                if (event.target.value) {
+                  // creating a new url, for id's. The url is of different form : https://{baseUrl.origin}/retreats/{id}
+                  newUrl = `${baseUrl}/${event.target.value}`;
+
+                  fetchData(newUrl, true);
+                } else {
+                  // if the field value is NULL or undefined, we trace back to our original URL
+                  newUrl = createUrl({ page: 1, limit: 3 });
+
+                  fetchData(newUrl, false);
+                }
+                setUrl(newUrl);
               }}
             />
           </div>
@@ -140,7 +249,7 @@ function App() {
         </div>
         <Footer />
       </>
-    </UrlContext.Provider>
+    </RetreatContext.Provider>
   );
 }
 

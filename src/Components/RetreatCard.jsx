@@ -3,6 +3,7 @@ import React from 'react'
 function RetreatCard({elem}) {
     const month = ['Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     const date = (new Date(elem.date * 1000))
+    
   return (
     <div className='bg-[#e0d9cf] flex flex-col gap-y-2 p-2 md:p-3 lg:px-4 rounded-lg shadow-lg md:w-[240px] lg:w-[480px]'>
         <img src={elem.image} alt="logo" className='aspect-video w-5/6 rounded-md'/>
